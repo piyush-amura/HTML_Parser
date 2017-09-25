@@ -12,7 +12,7 @@ class Tag
   def initialize(name)
     @name = name 
     @children = []
-    @content = ''
+    @content = nil
     @tagdata = {}
   end
 end
