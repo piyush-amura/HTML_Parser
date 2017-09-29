@@ -1,10 +1,8 @@
 require_relative './tag'
 require_relative './lib/stack'
-
 require 'pry'
 
 ch = 0
-HTML_FILE = ''
 
 # method to format tag after extraction
 #
@@ -18,20 +16,21 @@ def format_tag(tag)
   t
 end
 
-# method for finding the children of a tag object
+# <description>
 #
+# @param [<type>] line <description>
+# @param [<type>] tag <description>
 #
-# @return [<Tag object>] object of tag class
+# @return [<type>] <description>
 #
-def process_tags(tagname, fp, count, tags, line)
-  tag = Tag.new(tagname)
-  tags << tag
+def get_content(line, tag)
   content = ''
-  # binding.pry if tagname=='<a>';
-  binding.pry
-  line.scan(/>(.*?)</) { |match|  content += match[0].to_s }
-  tag.content = Content.new( content ) unless content[1..-2] == ''
+  line.scan(/>(.*?)</) { |match| content += match[0].to_s }
+  tag.content = Content.new(content) unless content[1..-2] == ''
+  tag
+end
 
+def get_tagdata(line, tag)
   tagdata = line.scan(/(\w+='.*?'|\w+=\".*?\")/)
   h = {}
   unless tagdata.nil?
@@ -44,33 +43,45 @@ def process_tags(tagname, fp, count, tags, line)
     end
   end
   tag.tagdata = h
+  tag
+end
 
-  fp[count..-1].each do |l|
-    break unless /(<\/#{tagname[1..-2]}\s{0,1})/.match(l).nil?
-    temp = l.scan(/(<[a-z0-9]+\s{0,1})|(<\/[a-z0-9]+\s{0,1})/).flatten.compact
-    next if temp.nil?
-    temp.each do |t|
-      tempname = format_tag(t)
-      (tag.children.push(tempname) && next) unless tempname.start_with?('</')
-      tag.children.push(tempname) if tag.children.include?("<#{tempname[2..-2]}>")
-    end
-  end
-  tag.children.shift unless tag.children.empty?
-  stack = Stack.new
-
-  temp = tag.children.first
+def create_children(fp,count,tagname,tag)
   flag = true
-  tag.children.each do |t|
-    unless flag
-      temp = t
-      flag = true
+  t = ''
+  fp[count..-1].each do |l|
+    tags_arr = l.scan(/(<[a-z0-9]+\s{0,1})|(<\/[a-z0-9]+\s{0,1})/)
+    unless tags_arr.empty?
+      tags_arr = tags_arr.flatten.compact
+      tags_arr.each do |m|
+        next if m.nil?
+        t1 = format_tag(m)
+        next if t1 == tagname
+        if flag
+          t = t1
+          tag.children.push(t) if /(<\/#{tagname[1..-2]}\s{0,1})/.match(l).nil?
+          flag = false
+        end
+        flag = true unless m.scan(/(<\/#{t[1..-2]}\s{0,1})/).empty?
+      end
     end
-    unless t.scan(/(<\/#{temp[1..-2]}\s{0,1})/).empty?
-      stack.push(temp)
-      flag = false
-    end
+    break unless /(<\/#{tagname[1..-2]}\s{0,1})/.match(l).nil?
   end
-  tag.children = stack.store
+  tag
+end
+
+# method for finding the children of a tag object
+#
+#
+# @return [<Tag object>] object of tag class
+#
+def process_tags(tagname, fp, count, tags, line)
+  tag = Tag.new(tagname)
+  tags << tag
+  tag = create_children(fp, count, tagname, tag)
+  tag = get_tagdata(line, tag)
+  tag = get_content(line, tag)
+  tag
 end
 
 # method for building tree after parsing html file
@@ -89,9 +100,7 @@ def build_tree
     # regex for closing tag
     c_t = line.scan(/(<\/[a-z0-9]+\s{0,1})/)
     # skip if there are no matches
-
-    next if o_t.nil? && c_t.nil?
-
+    next if o_t.empty? && c_t.empty?
     unless o_t.empty?
       o_t.each do |t|
         # formatting tag
@@ -100,7 +109,6 @@ def build_tree
         process_tags(o_tagname, fp, count, tags, line)
       end
     end
-
     unless c_t.empty?
       c_t.each do |t|
         c_tagname = format_tag(t[0])
@@ -157,6 +165,7 @@ def show_tagdata
     end
   end
 end
+
 # method that routes the user according to his/her particular choice
 #
 # @param [<Integer>] ch <choice>
